@@ -13,6 +13,7 @@ import {
 } from "@/components/icons";
 import { PRICING_LABEL, type Pricing } from "@/lib/event-pricing";
 import { SeatsMeter } from "@/components/SeatsMeter";
+import { capacityLevel } from "@/lib/capacity";
 
 type EventSummary = {
   event_id: string;
@@ -208,12 +209,10 @@ export default function EventsPage() {
     let near = 0;
 
     for (const event of events) {
-      if (event.capacity === null || event.capacity === undefined) {
-        continue;
-      }
+      const level = capacityLevel(event);
 
-      if (Number(event.seatsRemaining ?? 0) < 0) over += 1;
-      else if (Number(event.fillPercentage ?? 0) >= 85) near += 1;
+      if (level === "over") over += 1;
+      else if (level === "near") near += 1;
     }
 
     return { over, near };
@@ -657,17 +656,10 @@ export default function EventsPage() {
                      * left edge says which, and survives the list being
                      * re-sorted by size.
                      */
-                    const hasCap =
-                      event.capacity !== null &&
-                      event.capacity !== undefined;
+                    const level = capacityLevel(event);
 
-                    const over =
-                      hasCap && Number(event.seatsRemaining ?? 0) < 0;
-
-                    const near =
-                      hasCap &&
-                      !over &&
-                      Number(event.fillPercentage ?? 0) >= 85;
+                    const over = level === "over";
+                    const near = level === "near";
 
                     return (
                       <tr

@@ -7,6 +7,8 @@
  * headroom is left", and both go red at the same end.
  */
 
+import { capacityLevel } from "@/lib/capacity";
+
 type Seats = {
   /* Undefined until supabase/event-capacity.sql runs. */
   capacity?: number | null;
@@ -42,7 +44,9 @@ export function SeatsMeter({ event }: { event: Seats }) {
   const left = Number(event.seatsRemaining ?? 0);
   const fill = Number(event.fillPercentage ?? 0);
 
-  const over = left < 0;
+  const level = capacityLevel(event);
+
+  const over = level === "over";
 
   /*
    * Clamped for the bar only. The number beside it stays signed, so an
@@ -50,11 +54,17 @@ export function SeatsMeter({ event }: { event: Seats }) {
    */
   const width = Math.max(0, Math.min(100, fill));
 
-  const level = over
-    ? "meter-fill-danger"
-    : fill >= 85
-      ? "meter-fill-warning"
-      : "meter-fill-success";
+  /*
+   * Shared with the row highlight and the count beside the sort, so a
+   * bar that has gone amber and a row with an amber edge always mean
+   * the same thing.
+   */
+  const tone =
+    level === "over"
+      ? "meter-fill-danger"
+      : level === "near"
+        ? "meter-fill-warning"
+        : "meter-fill-success";
 
   return (
     <div className="seats">
@@ -67,7 +77,7 @@ export function SeatsMeter({ event }: { event: Seats }) {
         aria-label={`${event.registrations} of ${capacity} seats taken`}
       >
         <div
-          className={`meter-fill ${level}`}
+          className={`meter-fill ${tone}`}
           style={{ width: `${width}%` }}
         />
       </div>
