@@ -73,6 +73,18 @@ export default function EventsPage() {
    * which is exactly the combination worth asking two days out.
    */
   const [onlyEmpty, setOnlyEmpty] = useState(false);
+
+  /*
+   * Fullest first by default.
+   *
+   * The list arrives ordered by registrations, which puts the biggest
+   * events on top -- but "big" and "about to overflow" are different
+   * things. An event 135% full with 54 people is the one somebody has
+   * to act on; an event with 146 registrations against 210 seats is
+   * fine. Sorting by pressure rather than by size puts the problems
+   * where they are seen.
+   */
+  const [sortMode, setSortMode] = useState<"fill" | "size">("fill");
   const [saving, setSaving] = useState("");
 
   const [counts, setCounts] = useState<PricingCounts>({
@@ -139,7 +151,7 @@ export default function EventsPage() {
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
 
-    return events.filter((event) => {
+    const rows = events.filter((event) => {
       if (
         pricingTab !== "all" &&
         event.pricingResolved !== pricingTab
@@ -158,7 +170,54 @@ export default function EventsPage() {
         String(event.event_id).toLowerCase().includes(query)
       );
     });
-  }, [events, search, pricingTab, onlyEmpty]);
+
+    if (sortMode === "size") return rows;
+
+    /*
+     * An event with no capacity recorded has no pressure to sort by,
+     * so it falls below everything that does and keeps its own order
+     * by size. Treating "unknown" as 0% would bury the 8 events whose
+     * figure the sheet never gave among the genuinely empty ones.
+     */
+    return [...rows].sort((a, b) => {
+      const fill = (event: EventSummary) =>
+        event.capacity === null || event.capacity === undefined
+          ? null
+          : Number(event.fillPercentage ?? 0);
+
+      const left = fill(a);
+      const right = fill(b);
+
+      if (left === null && right === null) {
+        return Number(b.registrations ?? 0) - Number(a.registrations ?? 0);
+      }
+
+      if (left === null) return 1;
+      if (right === null) return -1;
+
+      return (
+        right - left ||
+        Number(b.registrations ?? 0) - Number(a.registrations ?? 0)
+      );
+    });
+  }, [events, search, pricingTab, onlyEmpty, sortMode]);
+
+  /* How many need looking at, regardless of the current filters. */
+  const pressure = useMemo(() => {
+    let over = 0;
+    let near = 0;
+
+    for (const event of events) {
+      if (event.capacity === null || event.capacity === undefined) {
+        continue;
+      }
+
+      if (Number(event.seatsRemaining ?? 0) < 0) over += 1;
+      else if (Number(event.fillPercentage ?? 0) >= 85) near += 1;
+    }
+
+    return { over, near };
+  }, [events]);
 
   const emptyCount = useMemo(
     () =>
@@ -418,6 +477,41 @@ export default function EventsPage() {
                 </span>
               </label>
 
+              {capacityAvailable && (
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    checked={sortMode === "fill"}
+                    onChange={(event) =>
+                      setSortMode(
+                        event.target.checked ? "fill" : "size"
+                      )
+                    }
+                  />
+
+                  <span>
+                    Fullest first
+                    {(pressure.over > 0 || pressure.near > 0) && (
+                      <span
+                        className="segmented-count"
+                        title={`${pressure.over} over capacity, ${pressure.near} at 85% or more`}
+                      >
+                        {pressure.over > 0 && (
+                          <span className="seats-over">
+                            {pressure.over} over
+                          </span>
+                        )}
+                        {pressure.over > 0 &&
+                          pressure.near > 0 &&
+                          " · "}
+                        {pressure.near > 0 &&
+                          `${pressure.near} near`}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              )}
+
               <a
                 className="btn btn-ghost btn-sm"
                 href={`/api/events/export${
@@ -557,8 +651,35 @@ export default function EventsPage() {
                         ? Math.round((scanned / registrations) * 100)
                         : 0;
 
+                    /*
+                     * Sorting alone is not a signal: the top row is the
+                     * top row whether it is 135% full or 4%. A coloured
+                     * left edge says which, and survives the list being
+                     * re-sorted by size.
+                     */
+                    const hasCap =
+                      event.capacity !== null &&
+                      event.capacity !== undefined;
+
+                    const over =
+                      hasCap && Number(event.seatsRemaining ?? 0) < 0;
+
+                    const near =
+                      hasCap &&
+                      !over &&
+                      Number(event.fillPercentage ?? 0) >= 85;
+
                     return (
-                      <tr key={event.event_id}>
+                      <tr
+                        key={event.event_id}
+                        className={
+                          over
+                            ? "row-over"
+                            : near
+                              ? "row-near"
+                              : undefined
+                        }
+                      >
                         <td>
                           <div className="row-title">
                             {event.name}

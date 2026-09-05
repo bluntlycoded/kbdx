@@ -1171,6 +1171,19 @@ table,
   margin-top: var(--space-3);
 }
 
+/* An event past its cap, or nearly at it.
+   A left edge rather than a filled row: 89 rows with four tinted
+   backgrounds reads as decoration, one coloured edge reads as a mark.
+   Paired with the meter in the same row, so it is never colour alone. */
+.row-over td:first-child,
+.row-near td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--danger);
+}
+
+.row-near td:first-child {
+  box-shadow: inset 3px 0 0 0 var(--warning);
+}
+
 /* Step number beside a panel title.
    The mail page is a sequence — test, one person, the queue, then
    automatic — and the numbers say so, because the order matters more
